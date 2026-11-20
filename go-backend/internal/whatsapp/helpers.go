@@ -42,16 +42,27 @@ func parseJID(phone string) (types.JID, error) {
 		return types.NewJID(user, server), nil
 	}
 
-	phone = strings.TrimPrefix(phone, "+")
-	phone = strings.TrimPrefix(phone, "0")
-	phone = strings.ReplaceAll(phone, " ", "")
-	phone = strings.ReplaceAll(phone, "-", "")
+	// Normalisasi nomor sebelum jadi JID. Sebelumnya "0" di depan hanya dibuang,
+	// sehingga "081328128315" menjadi "81328128315@s.whatsapp.net" dan lookup
+	// gagal dengan "no LID found for 813...@s.whatsapp.net".
+	// Sekarang semua pemisah dibuang dan prefiks nasional "0" diubah jadi "62".
+	// Asumsi: nomor non-JID yang masuk adalah nomor Indonesia.
+	digits := strings.Map(func(r rune) rune {
+		if r >= '0' && r <= '9' {
+			return r
+		}
+		return -1
+	}, phone)
 
-	if phone == "" {
+	if digits == "" {
 		return types.JID{}, fmt.Errorf("nomor telepon kosong")
 	}
 
-	return types.NewJID(phone, types.DefaultUserServer), nil
+	if strings.HasPrefix(digits, "0") {
+		digits = "62" + digits[1:]
+	}
+
+	return types.NewJID(digits, types.DefaultUserServer), nil
 }
 
 // extractMessageText extracts text from a whatsmeow message

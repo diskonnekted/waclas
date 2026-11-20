@@ -58,12 +58,9 @@ func (rl *RateLimiter) Middleware() gin.HandlerFunc {
 			return
 		}
 
-		// X-Real-IP ditulis ulang oleh nginx ($remote_addr) jadi tidak
-		// bisa dipalsukan; fallback ke ClientIP bila header tak ada.
-		ip := c.GetHeader("X-Real-IP")
-		if ip == "" {
-			ip = c.ClientIP()
-		}
+		// IP klien hanya diambil dari header kalau koneksi datang dari proxy
+		// terdaftar; selain itu pakai IP socket supaya header tidak bisa dipalsukan.
+		ip := clientIP(c)
 
 		rl.mu.Lock()
 		v, exists := rl.visitors[ip]

@@ -12,6 +12,7 @@ import (
 	"github.com/Aldi1963/wagataway/internal/config"
 	"github.com/Aldi1963/wagataway/internal/database"
 	"github.com/Aldi1963/wagataway/internal/handler"
+	"github.com/Aldi1963/wagataway/internal/middleware"
 	"github.com/Aldi1963/wagataway/internal/rls"
 	"github.com/Aldi1963/wagataway/internal/whatsapp"
 	"github.com/Aldi1963/wagataway/internal/worker"
@@ -63,7 +64,20 @@ func main() {
 	scheduler.Start()
 
 	// Setup HTTP server
+	// Daftarkan proxy terpercaya sebelum router melayani request: dipakai oleh
+	// router.SetTrustedProxies (gin) dan oleh rate limiter untuk memutuskan
+	// apakah X-Real-IP / X-Forwarded-For boleh dipercaya.
+	middleware.SetTrustedProxies(cfg.TrustedProxies)
+
 	router := handler.NewRouter(cfg, db, waManager)
+
+	// Batasi reverse proxy yang boleh mengisi X-Forwarded-For. Gin secara
+	// default mempercayai semua proxy, jadi klien yang konek langsung bisa
+	// memalsukan IP dan melewati rate limit per-IP.
+	if err := router.SetTrustedProxies(cfg.TrustedProxies); err != nil {
+		log.Fatal().Err(err).Strs("proxies", cfg.TrustedProxies).Msg("TRUSTED_PROXIES tidak valid")
+	}
+	log.Info().Strs("trusted_proxies", cfg.TrustedProxies).Msg("Trusted proxies configured")
 
 	srv := &http.Server{
 		Addr:         fmt.Sprintf(":%s", cfg.Port),

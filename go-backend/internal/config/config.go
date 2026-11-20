@@ -3,6 +3,7 @@ package config
 import (
 	"log"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/joho/godotenv"
@@ -14,6 +15,10 @@ type Config struct {
 	GinMode string
 	AppName string
 	AppURL  string
+	// TrustedProxies adalah daftar CIDR/IP reverse proxy yang boleh mengisi
+	// header X-Forwarded-For. Kosong = hanya loopback, sehingga header itu
+	// dari klien langsung diabaikan (mencegah pemalsuan IP untuk bypass rate limit).
+	TrustedProxies []string
 
 	// Database
 	DatabaseURL string
@@ -70,6 +75,8 @@ func Load() *Config {
 		AppName: getEnv("APP_NAME", "WaGataway"),
 		AppURL:  getEnv("APP_URL", "http://localhost:8080"),
 
+		TrustedProxies: parseTrustedProxies(getEnv("TRUSTED_PROXIES", "")),
+
 		DatabaseURL: getEnv("DATABASE_URL", "postgres://user:password@localhost:5432/wagataway?sslmode=disable"),
 		RedisURL:    getEnv("REDIS_URL", ""),
 
@@ -104,4 +111,24 @@ func getEnv(key, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+// parseTrustedProxies mengubah TRUSTED_PROXIES ("10.0.0.0/8, 172.16.0.1")
+// menjadi slice. Kalau tidak diset, hanya loopback yang dipercaya — default
+// aman untuk deployment di belakang reverse proxy satu host, dan menutup
+// pemalsuan X-Forwarded-For saat port aplikasi terbuka langsung.
+func parseTrustedProxies(raw string) []string {
+	if strings.TrimSpace(raw) == "" {
+		return []string{"127.0.0.1", "::1"}
+	}
+	var proxies []string
+	for _, p := range strings.Split(raw, ",") {
+		if p = strings.TrimSpace(p); p != "" {
+			proxies = append(proxies, p)
+		}
+	}
+	if len(proxies) == 0 {
+		return []string{"127.0.0.1", "::1"}
+	}
+	return proxies
 }
